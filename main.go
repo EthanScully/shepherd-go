@@ -117,19 +117,16 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			fmt.Println("method 2")
 			goto update
 		}
 		ret.Close()
 		img, _, err = cli.ImageInspectWithRaw(ctx, tag)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			fmt.Println("method 3")
 			goto update
 		}
 		for _, digest := range img.RepoDigests {
 			if !digests[digest] {
-				fmt.Println("method 1")
 				goto update
 			}
 		}
