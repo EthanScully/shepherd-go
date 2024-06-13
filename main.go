@@ -85,11 +85,13 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		return
 	}
 	for _, service := range services {
+		// Get Tag
 		tag := service.Spec.TaskTemplate.ContainerSpec.Image
 		atIndex := strings.LastIndex(tag, "@")
 		if atIndex != -1 {
 			tag = tag[:atIndex]
 		}
+		// Get All Downloaded Digests for given tag
 		img, _, err := cli.ImageInspectWithRaw(ctx, tag)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -99,6 +101,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		for _, digest := range img.RepoDigests {
 			digests[digest] = true
 		}
+		// Set Up Auth for Pulling Tag
 		var auth string
 		platform := "docker.io"
 		if strings.Count(tag, "/") > 1 {
@@ -114,6 +117,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 				break
 			}
 		}
+		// Pull Tag
 		ret, err := cli.ImagePull(ctx, tag, image.PullOptions{
 			RegistryAuth: auth,
 		})
@@ -122,6 +126,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			goto update
 		}
 		ret.Close()
+		// Check if new digest is available
 		img, _, err = cli.ImageInspectWithRaw(ctx, tag)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
