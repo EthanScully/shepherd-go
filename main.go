@@ -31,13 +31,15 @@ func main() {
 func getAuth() (auths []registry.AuthConfig, err error) {
 	config, err := os.ReadFile("/root/.docker/config.json")
 	if err != nil {
+		err = fmt.Errorf("docker config not found, no registry authorization will be used, %v", err)
 		return
 	}
 	configJson := make(map[string]map[string]map[string]string)
 	err = json.Unmarshal(config, &configJson)
 	for k, v := range configJson["auths"] {
-		decode, err := base64.StdEncoding.DecodeString(v["auth"])
-		if err != nil {
+		decode, er := base64.StdEncoding.DecodeString(v["auth"])
+		if er != nil {
+			fmt.Fprintln(os.Stderr, er)
 			continue
 		}
 		parameters := strings.Split(string(decode), ":")
@@ -72,7 +74,7 @@ func prune(cli *client.Client, ctx context.Context) (err error) {
 func service(cli *client.Client, ctx context.Context) (err error) {
 	auths, err := getAuth()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "docker config not found, no registry authorization will be used, %v", err)
+		fmt.Fprintln(os.Stderr, err)
 	}
 	err = prune(cli, ctx)
 	if err != nil {
