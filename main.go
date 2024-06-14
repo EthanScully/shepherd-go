@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strconv"
@@ -139,6 +140,10 @@ func prune(cli *client.Client, ctx context.Context) (err error) {
 	return
 }
 func service(cli *client.Client, ctx context.Context) (err error) {
+	var ret io.ReadCloser
+	var auth string
+	var digests map[string]bool
+	platform := "docker.io"
 	auths, err := getAuth()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -162,15 +167,13 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		img, _, err := cli.ImageInspectWithRaw(ctx, tag)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			continue
+			goto update
 		}
-		digests := make(map[string]bool)
+		digests = make(map[string]bool)
 		for _, digest := range img.RepoDigests {
 			digests[digest] = true
 		}
 		// Set Up Auth for Pulling Tag
-		var auth string
-		platform := "docker.io"
 		if strings.Count(tag, "/") > 1 {
 			platform = tag[:strings.Index(tag, "/")]
 		}
@@ -185,7 +188,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			}
 		}
 		// Pull Tag
-		ret, err := cli.ImagePull(ctx, tag, image.PullOptions{
+		ret, err = cli.ImagePull(ctx, tag, image.PullOptions{
 			RegistryAuth: auth,
 		})
 		if err != nil {
