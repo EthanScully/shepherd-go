@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
@@ -22,12 +26,75 @@ func main() {
 		panic(fmt.Errorf("error connecting to docker socket: %v", err))
 	}
 	defer cli.Close()
-	err = service(cli, ctx)
-	if err != nil {
-		panic(fmt.Errorf("error running service: %v", err))
-	}
+	go func() {
+		err = service(cli, ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error running service: %v", err)
+		}
+		for {
+			if cronJob() {
+				err = service(cli, ctx)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error running service: %v", err)
+				}
+			}
+			time.Sleep(time.Second * 55)
+		}
+	}()
+	inter := make(chan os.Signal, 1)
+	signal.Notify(inter, os.Interrupt, syscall.SIGTERM)
+	<-inter
 }
-
+func cronJob() (start bool) {
+	if len(os.Args) < 1 {
+		time.Sleep(time.Minute * 4)
+		return true
+	}
+	now := time.Now()
+	cron := strings.Split(os.Args[1], " ")
+	run := 0
+	cronCheck := func(cron []string, pos, time int) int {
+		if len(cron) > pos && len(cron[pos]) > 0 {
+			num, err := strconv.Atoi(cron[pos])
+			if err != nil {
+				if cron[pos][0] == '*' {
+					if i := strings.Index(cron[pos], "/"); i != -1 && len(cron[pos]) > i+1 {
+						num, err := strconv.Atoi(cron[pos][i+1:])
+						if err != nil {
+							return 0
+						} else {
+							if time%num == 0 {
+								return 1 << pos
+							}
+						}
+					} else {
+						return 1 << pos
+					}
+				} else {
+					return 0
+				}
+			}
+			if time == num {
+				return 1 << pos
+			}
+		}
+		return 0
+	}
+	// minute
+	run = run | cronCheck(cron, 0, now.Minute())
+	//hour
+	run = run | cronCheck(cron, 1, now.Hour())
+	//day
+	run = run | cronCheck(cron, 2, now.Day())
+	//month
+	run = run | cronCheck(cron, 3, int(now.Month()))
+	//weekday
+	run = run | cronCheck(cron, 4, int(now.Weekday()))
+	if run == 31 {
+		start = true
+	}
+	return
+}
 func getAuth() (auths []registry.AuthConfig, err error) {
 	config, err := os.ReadFile("/root/.docker/config.json")
 	if err != nil {
