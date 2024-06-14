@@ -206,29 +206,14 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			fmt.Fprintf(os.Stderr, "error pulling image: %v\n", err)
 			continue
 		}
-		var outputs []string
-		var output string
-		for {
-			buff := make([]byte, 1)
-			_, err := ret.Read(buff)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				continue
-			}
-			if string(buff) == "\n" {
-				outputs = append(outputs, output)
-				output = ""
-			} else {
-				output += string(buff)
-			}
+		retData, err := io.ReadAll(ret)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading pull response: %v\n", err)
+			continue
 		}
-		if len(outputs) > 0 {
-			if strings.Contains(outputs[len(outputs)-1], "up to date") {
-				continue
-			}
+		ret.Close()
+		if strings.Contains(string(retData), "up to date") {
+			continue
 		}
 		fmt.Printf("Updating image: %s\n", tag)
 		service.Spec.TaskTemplate.ForceUpdate += 1
