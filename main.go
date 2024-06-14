@@ -115,7 +115,7 @@ func cronJob() (start bool) {
 	run = run | out
 	if run == 31 {
 		start = true
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Second)
 	}
 	return
 }
@@ -159,7 +159,9 @@ func prune(cli *client.Client, ctx context.Context) (err error) {
 			fmt.Printf("Untagged: %s\n", v.Untagged)
 		}
 	}
-	fmt.Printf("Space Reclaimed: %.1fMB\n", float64(pruneReport.SpaceReclaimed)/1e6)
+	if pruneReport.SpaceReclaimed > 0 {
+		fmt.Printf("Space Reclaimed: %.1fMB\n", float64(pruneReport.SpaceReclaimed)/1e6)
+	}
 	return
 }
 func service(cli *client.Client, ctx context.Context) (err error) {
@@ -215,7 +217,8 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		if strings.Contains(string(retData), "up to date") {
 			continue
 		}
-		fmt.Printf("Updating image: %s\n", tag)
+		// Update Service
+		fmt.Printf("Updating Service: %s\n", tag)
 		service.Spec.TaskTemplate.ForceUpdate += 1
 		service.Spec.TaskTemplate.ContainerSpec.Image = tag
 		resp, err := cli.ServiceUpdate(ctx, service.ID, service.Version, service.Spec, types.ServiceUpdateOptions{})
