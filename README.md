@@ -6,7 +6,7 @@ example in docker compose:
 
 ```YAML
 services:
-  swarm-macvlan:
+  shepherd:
     image: ethanscully/shepherd
     deploy:
       mode: global
