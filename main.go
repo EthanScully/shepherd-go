@@ -32,6 +32,7 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error running service: %v", err)
 		}
+		os.Exit(0)
 		for {
 			if cronJob() {
 				err = service(cli, ctx)
@@ -39,7 +40,7 @@ func main() {
 					fmt.Fprintf(os.Stderr, "error running service: %v", err)
 				}
 			}
-			time.Sleep(time.Second * 55)
+			time.Sleep(time.Second * 59)
 		}
 	}()
 	inter := make(chan os.Signal, 1)
@@ -93,6 +94,7 @@ func cronJob() (start bool) {
 	run = run | cronCheck(cron, 4, int(now.Weekday()))
 	if run == 31 {
 		start = true
+		time.Sleep(time.Second * 1)
 	}
 	return
 }
@@ -140,10 +142,6 @@ func prune(cli *client.Client, ctx context.Context) (err error) {
 	return
 }
 func service(cli *client.Client, ctx context.Context) (err error) {
-	var ret io.ReadCloser
-	var auth string
-	var digests map[string]bool
-	platform := "docker.io"
 	auths, err := getAuth()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -163,52 +161,54 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		if atIndex != -1 {
 			tag = tag[:atIndex]
 		}
-		// Get All Downloaded Digests for given tag
-		img, _, err := cli.ImageInspectWithRaw(ctx, tag)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			goto update
-		}
-		digests = make(map[string]bool)
-		for _, digest := range img.RepoDigests {
-			digests[digest] = true
-		}
 		// Set Up Auth for Pulling Tag
+		platform := "docker.io"
 		if strings.Count(tag, "/") > 1 {
 			platform = tag[:strings.Index(tag, "/")]
 		}
+		var auth string
 		for _, v := range auths {
 			if strings.Contains(v.ServerAddress, platform) {
 				auth, err = registry.EncodeAuthConfig(v)
 				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
+					fmt.Fprintf(os.Stderr, "error encoding auth: %v\n", err)
 					continue
 				}
 				break
 			}
 		}
 		// Pull Tag
-		ret, err = cli.ImagePull(ctx, tag, image.PullOptions{
+		ret, err := cli.ImagePull(ctx, tag, image.PullOptions{
 			RegistryAuth: auth,
 		})
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			goto update
+			fmt.Fprintf(os.Stderr, "error pulling image: %v\n", err)
+			continue
 		}
-		ret.Close()
-		// Check if new digest is available
-		img, _, err = cli.ImageInspectWithRaw(ctx, tag)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			goto update
-		}
-		for _, digest := range img.RepoDigests {
-			if !digests[digest] {
-				goto update
+		var outputs []string
+		var output string
+		for {
+			buff := make([]byte, 1)
+			_, err := ret.Read(buff)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
+			if string(buff) == "\n" {
+				outputs = append(outputs, output)
+				output = ""
+			} else {
+				output += string(buff)
 			}
 		}
-		continue
-	update:
+		if len(outputs) > 0 {
+			if strings.Contains(outputs[len(outputs)-1], "up to date") {
+				continue
+			}
+		}
 		fmt.Printf("Updating image: %s\n", tag)
 		service.Spec.TaskTemplate.ForceUpdate += 1
 		service.Spec.TaskTemplate.ContainerSpec.Image = tag
