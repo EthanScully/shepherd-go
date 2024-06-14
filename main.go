@@ -32,7 +32,6 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error running service: %v", err)
 		}
-		os.Exit(0)
 		for {
 			if cronJob() {
 				err = service(cli, ctx)
@@ -53,9 +52,9 @@ func cronJob() (start bool) {
 		return true
 	}
 	now := time.Now()
-	cron := strings.Split(os.Args[1], " ")
+	cron := os.Args[1:]
 	run := 0
-	cronCheck := func(cron []string, pos, time int) int {
+	cronCheck := func(cron []string, pos, time int) (int, error) {
 		if len(cron) > pos && len(cron[pos]) > 0 {
 			num, err := strconv.Atoi(cron[pos])
 			if err != nil {
@@ -63,35 +62,57 @@ func cronJob() (start bool) {
 					if i := strings.Index(cron[pos], "/"); i != -1 && len(cron[pos]) > i+1 {
 						num, err := strconv.Atoi(cron[pos][i+1:])
 						if err != nil {
-							return 0
+							return 0, fmt.Errorf("invalid cron format")
+						} else if time%num == 0 {
+							return 1 << pos, nil
 						} else {
-							if time%num == 0 {
-								return 1 << pos
-							}
+							return 0, nil
 						}
-					} else {
-						return 1 << pos
 					}
-				} else {
-					return 0
+					return 1 << pos, nil
 				}
-			}
-			if time == num {
-				return 1 << pos
+				return 0, fmt.Errorf("invalid cron format")
+			} else if time == num {
+				return 1 << pos, nil
 			}
 		}
-		return 0
+		return 0, nil
 	}
 	// minute
-	run = run | cronCheck(cron, 0, now.Minute())
+	out, err := cronCheck(cron, 0, now.Minute())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	run = run | out
 	//hour
-	run = run | cronCheck(cron, 1, now.Hour())
+	out, err = cronCheck(cron, 1, now.Hour())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	run = run | out
 	//day
-	run = run | cronCheck(cron, 2, now.Day())
+	out, err = cronCheck(cron, 2, now.Day())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	run = run | out
 	//month
-	run = run | cronCheck(cron, 3, int(now.Month()))
+	out, err = cronCheck(cron, 3, int(now.Month()))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	run = run | out
 	//weekday
-	run = run | cronCheck(cron, 4, int(now.Weekday()))
+	out, err = cronCheck(cron, 4, int(now.Weekday()))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	run = run | out
 	if run == 31 {
 		start = true
 		time.Sleep(time.Second * 1)
