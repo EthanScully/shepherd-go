@@ -177,19 +177,27 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
+	newImages := make(map[string]bool)
 	for _, service := range services {
+		// Init Vars
+		platform := "docker.io"
+		var auth string
+		var ret io.ReadCloser
+		var retData []byte
 		// Get Tag
 		tag := service.Spec.TaskTemplate.ContainerSpec.Image
 		atIndex := strings.LastIndex(tag, "@")
 		if atIndex != -1 {
 			tag = tag[:atIndex]
 		}
+		// Check if Tag is already pulled
+		if newImages[tag] {
+			goto update
+		}
 		// Set Up Auth for Pulling Tag
-		platform := "docker.io"
 		if strings.Count(tag, "/") > 1 {
 			platform = tag[:strings.Index(tag, "/")]
 		}
-		var auth string
 		for _, v := range auths {
 			if strings.Contains(v.ServerAddress, platform) {
 				auth, err = registry.EncodeAuthConfig(v)
@@ -201,14 +209,14 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			}
 		}
 		// Pull Tag
-		ret, err := cli.ImagePull(ctx, tag, image.PullOptions{
+		ret, err = cli.ImagePull(ctx, tag, image.PullOptions{
 			RegistryAuth: auth,
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error pulling image: %v\n", err)
 			continue
 		}
-		retData, err := io.ReadAll(ret)
+		retData, err = io.ReadAll(ret)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error reading pull response: %v\n", err)
 			continue
@@ -217,6 +225,8 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		if strings.Contains(string(retData), "up to date") {
 			continue
 		}
+		newImages[tag] = true
+	update:
 		// Update Service
 		fmt.Printf("Updating Service: %s\n", service.Spec.Name)
 		service.Spec.TaskTemplate.ForceUpdate += 1
