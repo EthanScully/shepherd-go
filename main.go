@@ -218,7 +218,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			continue
 		}
 		// Update Service
-		fmt.Printf("Updating Service: %s\n", tag)
+		fmt.Printf("Updating Service: %s\n", service.Spec.Name)
 		service.Spec.TaskTemplate.ForceUpdate += 1
 		service.Spec.TaskTemplate.ContainerSpec.Image = tag
 		resp, err := cli.ServiceUpdate(ctx, service.ID, service.Version, service.Spec, types.ServiceUpdateOptions{})
