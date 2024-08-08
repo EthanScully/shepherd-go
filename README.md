@@ -10,6 +10,9 @@ services:
     image: ethanscully/shepherd
     deploy:
       mode: global
+      placement:
+        constraints:
+          - node.role == manager
     volumes: 
       - /var/run/docker.sock:/var/run/docker.sock
       - /root/.docker/config.json:/root/.docker/config.json:ro
