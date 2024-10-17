@@ -1,5 +1,6 @@
 Docker swarm service for automatically updating your services whenever their image is refreshed
 
+If command is ommited, default update check is every 4 hours
 
 ### Usage
 example in docker compose:

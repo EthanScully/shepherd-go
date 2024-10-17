@@ -48,7 +48,7 @@ func main() {
 }
 func cronJob() (start bool) {
 	if len(os.Args) < 1 {
-		time.Sleep(time.Minute * 4)
+		time.Sleep(time.Hour * 4)
 		return true
 	}
 	now := time.Now()
