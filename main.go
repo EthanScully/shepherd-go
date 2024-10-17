@@ -171,11 +171,11 @@ func prune(cli *client.Client, ctx context.Context) (err error) {
 func service(cli *client.Client, ctx context.Context) (err error) {
 	auths, err := getAuth()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, err.Error())
 	}
 	err = prune(cli, ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Image Prune Failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Image Prune Failed: %s\n", err.Error())
 	}
 	services, err := cli.ServiceList(ctx, types.ServiceListOptions{})
 	if err != nil {
@@ -206,7 +206,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			if strings.Contains(v.ServerAddress, platform) {
 				auth, err = registry.EncodeAuthConfig(v)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "error encoding auth: %v\n", err)
+					fmt.Fprintf(os.Stderr, "error encoding auth: %s\n", err.Error())
 					continue
 				}
 				break
@@ -217,12 +217,12 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			RegistryAuth: auth,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error pulling image: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error pulling image: %s\n", err.Error())
 			continue
 		}
 		retData, err = io.ReadAll(ret)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading pull response: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error reading pull response: %s\n", err.Error())
 			continue
 		}
 		ret.Close()
