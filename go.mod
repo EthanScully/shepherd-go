@@ -2,7 +2,10 @@ module shepherd-go
 
 go 1.22
 
-require github.com/docker/docker v27.3.1+incompatible
+require (
+	github.com/docker/docker v27.3.1+incompatible
+	github.com/robfig/cron/v3 v3.0.1
+)
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect

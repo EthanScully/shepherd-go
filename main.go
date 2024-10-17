@@ -7,15 +7,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
@@ -25,97 +24,25 @@ func main() {
 		panic(fmt.Errorf("error connecting to docker socket: %v", err))
 	}
 	defer cli.Close()
-	go func() {
-		err = service(cli, ctx)
-		if err != nil {
+	wrapper := func() {
+		if err := service(cli, ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "error running service: %v", err)
 		}
-		for {
-			if cronJob() {
-				err = service(cli, ctx)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "error running service: %v", err)
-				}
-			}
-			time.Sleep(time.Second * 59)
-		}
-	}()
+	}
+	wrapper()
+	entry := "0 */4 * * *"
+	if len(os.Args) >= 6 {
+		entry = strings.Join(os.Args[1:6], " ")
+	}
+	c := cron.New()
+	_, err = c.AddFunc(entry, wrapper)
+	if err != nil {
+		panic(err)
+	}
+	c.Start()
 	inter := make(chan os.Signal, 1)
 	signal.Notify(inter, os.Interrupt, syscall.SIGTERM)
 	<-inter
-}
-func cronJob() (start bool) {
-	if len(os.Args) < 1 {
-		time.Sleep(time.Hour * 4)
-		return true
-	}
-	now := time.Now()
-	cron := os.Args[1:]
-	run := 0
-	cronCheck := func(cron []string, pos, time int) (int, error) {
-		if len(cron) > pos && len(cron[pos]) > 0 {
-			num, err := strconv.Atoi(cron[pos])
-			if err != nil {
-				if cron[pos][0] == '*' {
-					if i := strings.Index(cron[pos], "/"); i != -1 && len(cron[pos]) > i+1 {
-						num, err := strconv.Atoi(cron[pos][i+1:])
-						if err != nil {
-							return 0, fmt.Errorf("invalid cron format")
-						} else if time%num == 0 {
-							return 1 << pos, nil
-						} else {
-							return 0, nil
-						}
-					}
-					return 1 << pos, nil
-				}
-				return 0, fmt.Errorf("invalid cron format")
-			} else if time == num {
-				return 1 << pos, nil
-			}
-		}
-		return 0, nil
-	}
-	// minute
-	out, err := cronCheck(cron, 0, now.Minute())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-	run = run | out
-	//hour
-	out, err = cronCheck(cron, 1, now.Hour())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-	run = run | out
-	//day
-	out, err = cronCheck(cron, 2, now.Day())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-	run = run | out
-	//month
-	out, err = cronCheck(cron, 3, int(now.Month()))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-	run = run | out
-	//weekday
-	out, err = cronCheck(cron, 4, int(now.Weekday()))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-	run = run | out
-	if run == 31 {
-		start = true
-		time.Sleep(time.Second)
-	}
-	return
 }
 func getAuth() (auths []registry.AuthConfig, err error) {
 	config, err := os.ReadFile("/root/.docker/config.json")
@@ -227,7 +154,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
-		if resp.Warnings != nil && len(resp.Warnings) > 0 {
+		if len(resp.Warnings) > 0 {
 			for _, v := range resp.Warnings {
 				fmt.Printf("Warning: %s\n", v)
 			}
