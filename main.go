@@ -122,15 +122,19 @@ func cronJob() (start bool) {
 func getAuth() (auths []registry.AuthConfig, err error) {
 	config, err := os.ReadFile("/root/.docker/config.json")
 	if err != nil {
-		err = fmt.Errorf("docker config not found, no registry authorization will be used, %v", err)
+		err = fmt.Errorf("docker config not found, no registry authorization will be used, %s", err.Error())
 		return
 	}
 	configJson := make(map[string]map[string]map[string]string)
 	err = json.Unmarshal(config, &configJson)
+	if err != nil {
+		err = fmt.Errorf("json unmarshal error, %s", err.Error())
+		return
+	}
 	for k, v := range configJson["auths"] {
-		decode, er := base64.StdEncoding.DecodeString(v["auth"])
-		if er != nil {
-			fmt.Fprintln(os.Stderr, er)
+		decode, err := base64.StdEncoding.DecodeString(v["auth"])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
 		parameters := strings.Split(string(decode), ":")
