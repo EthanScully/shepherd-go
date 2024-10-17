@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 )
@@ -181,27 +179,23 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	newImages := make(map[string]bool)
 	for _, service := range services {
-		// Init Vars
-		platform := "docker.io"
-		var auth string
-		var ret io.ReadCloser
-		var retData []byte
 		// Get Tag
+		var tagDigest string
 		tag := service.Spec.TaskTemplate.ContainerSpec.Image
 		atIndex := strings.LastIndex(tag, "@")
 		if atIndex != -1 {
+			if len(tag) > atIndex+1 {
+				tagDigest = tag[atIndex+1:]
+			}
 			tag = tag[:atIndex]
 		}
-		// Check if Tag is already pulled
-		if newImages[tag] {
-			goto update
-		}
 		// Set Up Auth for Pulling Tag
+		platform := "docker.io"
 		if strings.Count(tag, "/") > 1 {
 			platform = tag[:strings.Index(tag, "/")]
 		}
+		var auth string
 		for _, v := range auths {
 			if strings.Contains(v.ServerAddress, platform) {
 				auth, err = registry.EncodeAuthConfig(v)
@@ -212,30 +206,23 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 				break
 			}
 		}
-		// Pull Tag
-		ret, err = cli.ImagePull(ctx, tag, image.PullOptions{
-			RegistryAuth: auth,
-		})
+		// Compare Digests
+		DistInsp, err := cli.DistributionInspect(ctx, tag, auth)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error pulling image: %s\n", err.Error())
+			fmt.Fprintf(os.Stderr, "error contacting remote registry, %s\n", err.Error())
 			continue
 		}
-		retData, err = io.ReadAll(ret)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading pull response: %s\n", err.Error())
+		if string(DistInsp.Descriptor.Digest) == tagDigest {
 			continue
 		}
-		ret.Close()
-		if strings.Contains(string(retData), "up to date") {
-			continue
-		}
-		newImages[tag] = true
-	update:
+		tag = fmt.Sprintf("%s@%s", tag, string(DistInsp.Descriptor.Digest))
 		// Update Service
 		fmt.Printf("Updating Service: %s\n", service.Spec.Name)
-		service.Spec.TaskTemplate.ForceUpdate += 1
 		service.Spec.TaskTemplate.ContainerSpec.Image = tag
-		resp, err := cli.ServiceUpdate(ctx, service.ID, service.Version, service.Spec, types.ServiceUpdateOptions{})
+		resp, err := cli.ServiceUpdate(ctx, service.ID, service.Version, service.Spec, types.ServiceUpdateOptions{
+			EncodedRegistryAuth: auth,
+			RegistryAuthFrom:    "spec",
+		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			continue
