@@ -136,7 +136,7 @@ func service(cli *client.Client, ctx context.Context) (err error) {
 		// Compare Digests
 		DistInsp, err := cli.DistributionInspect(ctx, tag, auth)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error contacting remote registry, %s\n", err.Error())
+			fmt.Fprintf(os.Stderr, "error contacting remote registry, %s\n\ttag:%s\n", err.Error(), tag)
 			continue
 		}
 		if string(DistInsp.Descriptor.Digest) == tagDigest {
